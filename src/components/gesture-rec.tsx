@@ -2,8 +2,19 @@ import { DrawingUtils, FilesetResolver, GestureRecognizer } from "@mediapipe/tas
 import { getWebcam } from "../lib/webcam";
 import React, { useEffect, useRef, useState } from "react";
 
-interface videoStream{
+export interface videoStream{
    stream: React.RefObject<MediaStream | null>;
+}
+
+export const gestures = {
+    none: "None",
+    closed_fist: "Closed_Fist",
+    open_palm: "Open_Palm",
+    pointing_up: "Pointing_Up",
+    thumb_down: "Thumb_Down",
+    thumb_up: "Thumb_Up",
+    victory: "Victory",
+    iloveyou: "ILoveYou",
 }
 
 export default function HandRecogniser(stream:videoStream) {
@@ -12,6 +23,7 @@ export default function HandRecogniser(stream:videoStream) {
     const gestureRecogniserRef = useRef<GestureRecognizer | null>(null)
     const [webCamRunning, setWebCamRunning] = useState(false);
     const [recognizerReady, setRecognizerReady] = useState(false);
+    const [currentGestures, setCurrentGestures] = useState([gestures.none,gestures.none])
 
     useEffect(() => {
         getWebcam().then((stream) => {
@@ -111,11 +123,12 @@ export default function HandRecogniser(stream:videoStream) {
                 const drawingUtils = new DrawingUtils(ctx);
                 ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
                 
-                // Log detection results
-                console.log("Hand detection results:", {
-                    numHandsDetected: res.landmarks?.length || 0,
-                    gestures: res.gestures?.map(g => g[0]?.categoryName || 'none')
-                });
+                let gestures = res.gestures?.map(g => g[0]?.categoryName || 'none')
+
+                if (gestures !== currentGestures){
+                    console.log(gestures)
+                    setCurrentGestures(gestures)
+                }
 
                 // results.landmarks may be an array of landmark lists
                 // guard the shape and draw if present
