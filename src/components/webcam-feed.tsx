@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getWebcam } from "../lib/webcam";
 import { WebRTCPeer } from "../lib/webrtc";
+import { toast } from "sonner"
 
 function WebcamFeed() {
     const localVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -22,7 +23,7 @@ function WebcamFeed() {
                 newPeer.addLocalStream(stream);
                 setPeer(newPeer);
             } else {
-                alert("Could not access webcam.");
+                toast.error("Unable to access webcam");
             }
         });
     }, [roomId, isCaller]);
