@@ -1,14 +1,17 @@
 import { DrawingUtils, FilesetResolver, GestureRecognizer } from "@mediapipe/tasks-vision"
 import { getWebcam } from "../lib/webcam";
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
-export default function HandRecogniser() {
+interface videoStream{
+   stream: React.RefObject<MediaStream | null>;
+}
+
+export default function HandRecogniser(stream:videoStream) {
     const videoRef = useRef<HTMLVideoElement | null>(null)
     const canvasRef = useRef<HTMLCanvasElement | null>(null)
     const gestureRecogniserRef = useRef<GestureRecognizer | null>(null)
     const [webCamRunning, setWebCamRunning] = useState(false);
     const [recognizerReady, setRecognizerReady] = useState(false);
-    const startedRef = useRef(false);
 
     useEffect(() => {
         getWebcam().then((stream) => {
@@ -22,10 +25,9 @@ export default function HandRecogniser() {
                 });
                 videoRef.current.addEventListener("loadeddata", () => {
                     setWebCamRunning(true);
-                    maybeStartPredictLoop();
                 });
             } else {
-                // alert("Could not access webcam.");
+                console.error("Could not access webcam.");
             }
         });
     }, []);
@@ -33,48 +35,52 @@ export default function HandRecogniser() {
     useEffect(()=>{
         const gesture = async () => {
             const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm") 
+            console.log("Creating GestureRecognizer...");
             gestureRecogniserRef.current = await GestureRecognizer.createFromOptions(vision, {
                 baseOptions: {
-                    modelAssetPath: "../../gesture_recognizer.task",
-                    delegate: "GPU"
+                    modelAssetPath: "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/latest/gesture_recognizer.task",
+                    delegate: "CPU"  // Model uses CPU-only ops anyway
                 },
-                runningMode: "VIDEO"
+                runningMode: "VIDEO",
+                numHands: 2  // Enable detection of up to 2 hands
             });
+            console.log("GestureRecognizer created successfully");
             setRecognizerReady(true);
-            maybeStartPredictLoop();
+            if (canvasRef.current){
+                stream.stream.current = canvasRef.current.captureStream();
+            }
         }
 
         gesture();
     }, []);
 
-    
-    // Start the predict loop only when both the video and recognizer are ready.
-    function maybeStartPredictLoop() {
-        if (startedRef.current) return;
-        if (recognizerReady && videoRef.current && canvasRef.current) {
-            startedRef.current = true;
-            // size canvas to match video element's intrinsic size
+    // Use an effect to start prediction when both video and recognizer are ready
+    useEffect(() => {
+        console.log("Checking conditions for prediction start:", {
+            recognizerReady,
+            webCamRunning,
+            hasVideo: !!videoRef.current,
+            hasCanvas: !!canvasRef.current
+        });
+        
+        if (recognizerReady && webCamRunning && videoRef.current && canvasRef.current) {
+            console.log("All conditions met, starting prediction loop");
             const video = videoRef.current;
             const canvas = canvasRef.current;
-            // set canvas pixel size to video size
-            canvas.width = video.videoWidth || video.clientWidth || 640;
-            canvas.height = video.videoHeight || video.clientHeight || 480;
-            // make canvas overlay video
-            canvas.style.position = 'absolute';
-            canvas.style.left = '0';
-            canvas.style.top = '0';
-            canvas.style.zIndex = '2';
+            
+            const setupCanvasAndStartPrediction = () => {
+                canvas.width = video.videoWidth || 640;
+                canvas.height = video.videoHeight || 480;
+                window.requestAnimationFrame(predictWebcam);
+            };
 
-            // ensure video is positioned so canvas overlays it
-            video.style.position = 'absolute';
-            video.style.left = '0';
-            video.style.top = '0';
-            video.style.zIndex = '1';
-
-            setWebCamRunning(true);
-            window.requestAnimationFrame(predictWebcam);
+            if (video.videoWidth === 0) {
+                video.addEventListener('loadedmetadata', setupCanvasAndStartPrediction, { once: true });
+            } else {
+                setupCanvasAndStartPrediction();
+            }
         }
-    }
+    }, [recognizerReady, webCamRunning]); // Only re-run when these states change
 
     function clearCanvas() {
         const c = canvasRef.current;
@@ -87,7 +93,11 @@ export default function HandRecogniser() {
     function predictWebcam() {
         try {
             if (!gestureRecogniserRef.current || !videoRef.current || !canvasRef.current) {
-                // not ready yet
+                console.log("predictWebcam - missing required refs:", {
+                    hasRecognizer: !!gestureRecogniserRef.current,
+                    hasVideo: !!videoRef.current,
+                    hasCanvas: !!canvasRef.current
+                });
                 return;
             }
 
@@ -100,6 +110,12 @@ export default function HandRecogniser() {
                 const ctx = canvasRef.current.getContext('2d')!;
                 const drawingUtils = new DrawingUtils(ctx);
                 ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                
+                // Log detection results
+                console.log("Hand detection results:", {
+                    numHandsDetected: res.landmarks?.length || 0,
+                    gestures: res.gestures?.map(g => g[0]?.categoryName || 'none')
+                });
 
                 // results.landmarks may be an array of landmark lists
                 // guard the shape and draw if present
@@ -130,9 +146,14 @@ export default function HandRecogniser() {
     }
 
     return (
-        <>
-            <canvas ref={canvasRef}></canvas>
-            <video ref={videoRef} autoPlay></video>
-        </>
+        <div style={{ position: 'relative', width: '640px', height: '480px' }}>
+            <canvas ref={canvasRef} style={{ position: 'absolute', left: 0, top: 0, zIndex: 2 }}></canvas>
+            <video 
+                ref={videoRef} 
+                style={{ position: 'absolute', left: 0, top: 0, zIndex: 1, width: '100%', height: '100%' }}
+                autoPlay 
+                playsInline
+            ></video>
+        </div>
     )
 }
