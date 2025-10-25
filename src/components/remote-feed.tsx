@@ -1,91 +1,169 @@
 import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from "react";
 import { WebRTCPeer } from "../lib/webrtc";
 
+/**
+ * RemoteFeedHandle: Methods exposed to parent component via ref
+ *
+ * Why use a ref handle?
+ * The parent (App.tsx) needs to control when to connect/disconnect.
+ * Using a ref allows the parent to call methods on this child component.
+ */
 export interface RemoteFeedHandle {
-    setRoomId: (roomId: string) => void;
-    connect: () => void;
-    disconnect: () => void;
-    sendData: (data: unknown) => void;
-    onDataReceived: (callback: (data: unknown) => void) => void;
-    getDataChannelState: () => RTCDataChannelState | null;
+    connect: (roomId: string) => void;      // Start WebRTC connection
+    disconnect: () => void;                 // Stop WebRTC connection
+    sendData: (data: unknown) => void;      // Send data through data channel
+    onDataReceived: (callback: (data: unknown) => void) => void;  // Register callback for incoming data
+    getDataChannelState: () => RTCDataChannelState | null;        // Check if data channel is open
 }
 
+/**
+ * RemoteFeedProps: Props passed from parent
+ */
 interface RemoteFeedProps {
-    localStream: MediaStream | null;
-    peerId?: string;
+    localStreamRef: React.RefObject<MediaStream | null>;  // Our webcam stream (from HandRecogniser)
+    peerId?: string;                                       // Are we 'caller' or 'callee'?
 }
 
+/**
+ * RemoteFeed Component: Displays remote peer's video and manages WebRTC connection
+ *
+ * What this component does:
+ * 1. Creates and manages a WebRTCPeer instance
+ * 2. Displays the remote peer's video in a <video> element
+ * 3. Handles connection/disconnection
+ * 4. Provides methods to parent for sending data
+ *
+ * How it works:
+ * - Parent calls connect(roomId) → We create WebRTCPeer → Connection starts
+ * - WebRTCPeer receives remote video → Calls onRemoteStream callback → We set video.srcObject
+ * - Video element displays the remote stream
+ */
 const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
-    ({ localStream, peerId = 'callee' }, ref) => {
-        const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
-        const [peer, setPeer] = useState<WebRTCPeer | null>(null);
-        const [roomId, setRoomId] = useState<string>('');
-        const [isConnected, setIsConnected] = useState(false);
-        const dataCallbackRef = useRef<((data: unknown) => void) | null>(null);
+    ({ localStreamRef, peerId = 'callee' }, ref) => {
+        // === Component State ===
 
-        const connect = () => {
-            if (!roomId || !localStream) {
-                console.error('Room ID and local stream are required');
+        const remoteVideoRef = useRef<HTMLVideoElement | null>(null);  // Reference to <video> element
+        const [peer, setPeer] = useState<WebRTCPeer | null>(null);     // Current WebRTC peer instance
+        const [roomId, setRoomId] = useState<string>('');              // Current room ID
+        const [isConnected, setIsConnected] = useState(false);         // Are we connected?
+        const dataCallbackRef = useRef<((data: unknown) => void) | null>(null);  // Callback for incoming data
+
+        /**
+         * connect(): Initialize and start WebRTC connection
+         *
+         * This is called by the parent (App.tsx) when user clicks "Connect" button.
+         *
+         * Steps:
+         * 1. Validate we have room ID and local stream
+         * 2. Clean up any existing peer connection
+         * 3. Create new WebRTCPeer instance
+         * 4. Initialize (clean old messages)
+         * 5. Add our local video/audio stream
+         * 6. If caller: Create data channel and wait for callee
+         * 7. If callee: Send "ready" signal to start the handshake
+         */
+        const connect = async (newRoomId: string) => {
+            // Get the current stream from the ref
+            // (HandRecogniser sets this asynchronously after canvas is ready)
+            const localStream = localStreamRef.current;
+
+            // Validation: Must have both room ID and stream
+            if (!newRoomId || !localStream) {
+                console.error('Room ID and local stream are required. Room:', newRoomId, 'Stream:', localStream);
                 return;
             }
 
-            // Clean up existing peer if any
+            // Update our state with the room ID
+            setRoomId(newRoomId);
+
+            // Clean up existing connection if reconnecting
             if (peer) {
                 peer.close();
                 setPeer(null);
             }
 
+            // Create new WebRTC peer instance
+            // Pass callbacks for handling remote stream and data
             const newPeer = new WebRTCPeer(
-                roomId,
+                newRoomId,
                 peerId,
+                // Callback when remote stream arrives
                 (remoteStream) => {
+                    // Set the remote stream as the source of our <video> element
                     if (remoteVideoRef.current) {
                         remoteVideoRef.current.srcObject = remoteStream;
                     }
                 },
+                // Callback when data arrives via data channel
                 (data) => {
-                    // Call the registered callback when data is received
+                    // If parent registered a callback, call it
                     if (dataCallbackRef.current) {
                         dataCallbackRef.current(data);
                     }
                 }
             );
 
-            newPeer.addLocalStream(localStream);
+            // Initialize: Clean up old Firestore messages and start listening
+            await newPeer.init();
 
-            // Create data channel if caller
+            // Add our local stream (webcam video/audio) to the connection
+            // The other peer will receive these tracks
+            await newPeer.addLocalStream(localStream);
+
+            // === CALLER vs CALLEE behavior ===
+
             if (peerId === 'caller') {
+                // CALLER: Create data channel and wait
+                // Must create data channel BEFORE making the offer
                 newPeer.createDataChannel();
-                // Don't create offer here - wait for callee's ready signal
+                console.log('[Caller] Data channel created, waiting for ready signal');
+                // The caller will create the offer when they receive callee's "ready" signal
             }
 
-            // Send ready signal if callee
             if (peerId === 'callee') {
-                newPeer.sendReady();
+                // CALLEE: Send ready signal
+                // This tells the caller "I'm ready, you can send me an offer now"
+                console.log('[Callee] Sending ready signal to caller');
+                await newPeer.sendReady();
+                // After this, we wait for the caller's offer
             }
 
+            // Save the peer instance and mark as connected
             setPeer(newPeer);
             setIsConnected(true);
         };
 
+        /**
+         * disconnect(): Close WebRTC connection and clean up
+         *
+         * Called when user clicks "Disconnect" button or component unmounts
+         */
         const disconnect = () => {
             if (peer) {
-                peer.close();
+                peer.close();          // Close peer connection and stop Firestore listener
                 setPeer(null);
                 setIsConnected(false);
+
+                // Clear the video element
                 if (remoteVideoRef.current) {
                     remoteVideoRef.current.srcObject = null;
                 }
             }
         };
 
-        // Expose methods to parent via ref
+        /**
+         * useImperativeHandle: Expose methods to parent via ref
+         *
+         * This lets the parent component call these methods:
+         * remoteFeedRef.current.connect(roomId)
+         * remoteFeedRef.current.disconnect()
+         * etc.
+         */
         useImperativeHandle(ref, () => ({
-            setRoomId: (newRoomId: string) => {
-                setRoomId(newRoomId);
-            },
             connect,
             disconnect,
+
+            // sendData: Send JSON data to other peer via data channel
             sendData: (data: unknown) => {
                 if (!peer) {
                     console.error('Peer connection not established');
@@ -93,9 +171,13 @@ const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
                 }
                 peer.sendData(data);
             },
+
+            // onDataReceived: Register a callback for when data arrives
             onDataReceived: (callback: (data: unknown) => void) => {
                 dataCallbackRef.current = callback;
             },
+
+            // getDataChannelState: Check if we can send data (is channel open?)
             getDataChannelState: () => {
                 if (!peer) {
                     return null;
@@ -104,7 +186,12 @@ const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
             }
         }));
 
-        // Clean up on unmount
+        /**
+         * useEffect: Clean up on component unmount
+         *
+         * If user navigates away or component is removed,
+         * make sure we close the peer connection properly
+         */
         useEffect(() => {
             return () => {
                 if (peer) {
@@ -113,6 +200,12 @@ const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
             };
         }, [peer]);
 
+        /**
+         * useEffect: Clean up when browser tab is closed
+         *
+         * If user closes the tab/window, we should close the connection
+         * to let the other peer know we're gone
+         */
         useEffect(() => {
             const handleBeforeUnload = () => {
                 if (peer) {
@@ -127,16 +220,23 @@ const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
             };
         }, [peer]);
 
+        /**
+         * Render: Display video element and connection status
+         */
         return (
             <div className="flex flex-col gap-4">
                 <div className="relative h-[50vh] w-[40vw]">
                     <h3 className="text-lg font-semibold mb-2">Remote Feed</h3>
+
+                    {/* Video element where remote peer's video will appear */}
                     <video
                         ref={remoteVideoRef}
-                        autoPlay
-                        playsInline
+                        autoPlay          // Start playing as soon as stream arrives
+                        playsInline       // Prevent fullscreen on mobile
                         className="h-full w-full object-cover bg-black"
                     />
+
+                    {/* Show "Waiting..." if not connected, or "Connected" badge if connected */}
                     {!roomId || roomId.trim() === '' ? (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/80 text-white">
                             <p className="text-lg">Waiting for opponent...</p>
