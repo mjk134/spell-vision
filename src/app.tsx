@@ -1,8 +1,21 @@
+import Statbar from "./components/stat-bar"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { useRef, useEffect, useState } from 'react';
 import RemoteFeed from './components/remote-feed';
 import type { RemoteFeedHandle } from './components/remote-feed';
 import { toast } from 'sonner';
 import HandRecogniser from "./components/gesture-rec.tsx";
+
+
 
 
 function App() {
@@ -59,69 +72,81 @@ function App() {
     remoteFeedRef.current?.sendData(testData);
     toast.info('Sent: ' + JSON.stringify(testData));
   };
-
   return (
-    <main className="flex flex-col p-8 w-full items-center justify-center">
-      <h1 className="text-gray-200 text-3xl mb-6">Welcome to Spell Vision!!</h1>
+    <main className="flex flex-col max-w-[1000px] padding-20 w-full items-center justify-center">
+          <Dialog>
+      <form>
+        <DialogTrigger asChild>
+          <button>Open Dialog</button>
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit profile</DialogTitle>
+            <DialogDescription>
+              Make changes to your profile here. Click save when you&apos;re
+              done.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-3">
 
-      <div className="flex flex-col gap-4 mb-4 w-full max-w-md">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="Enter Room ID"
-            value={roomId}
-            onChange={(e) => setRoomId(e.target.value)}
-            disabled={isConnected}
-            className="flex-1 px-3 py-2 rounded border border-gray-600 bg-gray-800 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          />
-          <select
-            value={peerId}
-            onChange={(e) => setPeerId(e.target.value as 'caller' | 'callee')}
-            disabled={isConnected}
-            className="px-3 py-2 rounded border border-gray-600 bg-gray-800 text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <option value="caller">Caller</option>
-            <option value="callee">Callee</option>
-          </select>
+            </div>
+            <div className="grid gap-3">
+
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <button>Cancel</button>
+            </DialogClose>
+            <button type="submit">Save changes</button>
+          </DialogFooter>
+        </DialogContent>
+      </form>
+    </Dialog>
+      
+      <h1 className="text-gray-200 text-6xl">Spell Vision</h1>
+      <p className="font-mono text-gray-200">Created by: username, username & username</p>
+      <div className="relative p-8 flex items-center flex-col h-[90vh] w-full gap-2 margin-20">
+        {/* Dashed border with custom dashes */}
+        <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <rect x="1" y="1" width="98" height="98" fill="none" className="stroke-gray-400 [stroke-width:0.1] [stroke-dasharray:2.5_1]" />
+        </svg>
+        <div className="flex items-center max-h-full justify-between flex-row w-full">
+          <div className="flex flex-col w-[40%] h-full max-h-full gap-10">
+            {/* Local Player stream*/}
+            <div className="bg-gray-300 h-[28vmin]" />
+            {/* Local Player HP */}
+            <div className="flex flex-row items-center justify-between gap-4 text-gray-200 w-full h-[4vh]">
+              <Statbar progress={50} totalProgress={100} />
+              <p className="font-mono text-2xl w-[40%]">HP 100</p>
+            </div>
+            {/* local Player MP/*/}
+            <div className="flex flex-row items-center justify-between gap-4 text-gray-200 w-full h-[4vh]">
+              <Statbar progress={50} totalProgress={100} />
+              <p className="font-mono text-2xl w-[40%]">MP 50</p>
+            </div>
+          </div>
+          <h1 className="font-display text-gray-200">VS</h1>
+          <div className="flex flex-col w-[40%] h-full max-h-full gap-10">
+            {/* Remote video stream */}
+            <div className="bg-gray-300 h-[28vmin]" />
+            {/* Player HP for remote */}
+            <div className="flex flex-row items-center justify-between gap-4 text-gray-200 w-full h-[4vh]">
+              <Statbar progress={50} totalProgress={100} />
+              <p className="font-mono text-2xl w-[40%]">HP 100</p>
+            </div>
+            {/* Player MP for remote */}
+            <div className="flex flex-row items-center justify-between gap-4 text-gray-200 w-full h-[4vh]">
+              <Statbar progress={50} totalProgress={100} />
+              <p className="font-mono text-2xl w-[40%]">MP 50</p>
+            </div>
+          </div>
         </div>
-
-        <div className="flex gap-2">
-          {!isConnected ? (
-            <button
-              onClick={handleConnect}
-              className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-            >
-              Connect
-            </button>
-          ) : (
-            <>
-              <button
-                onClick={handleDisconnect}
-                className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors"
-              >
-                Disconnect
-              </button>
-              <button
-                onClick={sendTestData}
-                className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors"
-              >
-                Send Test Data
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      <div className="flex items-start flex-row w-full gap-4 justify-center">
-        <HandRecogniser stream={handRecogniserStreamRef} />
-        <RemoteFeed
-          ref={remoteFeedRef}
-          localStreamRef={handRecogniserStreamRef}
-          peerId={peerId}
-        />
       </div>
     </main>
-  );
+  )
 }
 
-export default App;
+export default App
+
