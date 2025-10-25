@@ -2,7 +2,7 @@ import { db } from './firebase';
 import { collection, addDoc, onSnapshot, deleteDoc } from 'firebase/firestore';
 
 export interface SignalingMessage {
-  type: 'offer' | 'answer' | 'ice-candidate';
+  type: 'offer' | 'answer' | 'ice-candidate' | 'ready';
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data: any;
   from: string;
@@ -48,6 +48,7 @@ export class WebRTCSignaling {
 export class WebRTCPeer {
   private peerConnection: RTCPeerConnection;
   private signaling: WebRTCSignaling;
+  private peerId: string;
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-expect-error
   private localStream: MediaStream | null = null;
@@ -55,6 +56,7 @@ export class WebRTCPeer {
   private onRemoteStream: (stream: MediaStream) => void;
 
   constructor(roomId: string, peerId: string, onRemoteStream: (stream: MediaStream) => void) {
+    this.peerId = peerId;
     this.onRemoteStream = onRemoteStream;
     this.peerConnection = new RTCPeerConnection({
       iceServers: [
@@ -68,7 +70,7 @@ export class WebRTCPeer {
       if (event.candidate) {
         this.signaling.sendMessage({
           type: 'ice-candidate',
-          data: event.candidate,
+          data: event.candidate.toJSON(),
           from: peerId,
           to: 'other'
         });
@@ -93,7 +95,7 @@ export class WebRTCPeer {
     await this.peerConnection.setLocalDescription(offer);
     this.signaling.sendMessage({
       type: 'offer',
-      data: offer,
+      data: { type: offer.type, sdp: offer.sdp },
       from: 'caller',
       to: 'callee'
     });
@@ -104,8 +106,17 @@ export class WebRTCPeer {
     await this.peerConnection.setLocalDescription(answer);
     this.signaling.sendMessage({
       type: 'answer',
-      data: answer,
+      data: { type: answer.type, sdp: answer.sdp },
       from: 'callee',
+      to: 'caller'
+    });
+  }
+
+  sendReady() {
+    this.signaling.sendMessage({
+      type: 'ready',
+      data: null,
+      from: this.peerId,
       to: 'caller'
     });
   }
@@ -113,14 +124,23 @@ export class WebRTCPeer {
   private async handleSignalingMessage(message: SignalingMessage) {
     switch (message.type) {
       case 'offer':
-        await this.peerConnection.setRemoteDescription(new RTCSessionDescription(message.data));
-        await this.createAnswer();
+        if (this.peerConnection.signalingState === 'stable') {
+          await this.peerConnection.setRemoteDescription(new RTCSessionDescription(message.data));
+          await this.createAnswer();
+        }
         break;
       case 'answer':
-        await this.peerConnection.setRemoteDescription(new RTCSessionDescription(message.data));
+        if (this.peerConnection.signalingState === 'have-local-offer') {
+          await this.peerConnection.setRemoteDescription(new RTCSessionDescription(message.data));
+        }
         break;
       case 'ice-candidate':
         await this.peerConnection.addIceCandidate(new RTCIceCandidate(message.data));
+        break;
+      case 'ready':
+        if (this.peerId === 'caller') {
+          this.createOffer();
+        }
         break;
     }
   }
