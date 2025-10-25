@@ -5,6 +5,9 @@ export interface RemoteFeedHandle {
     setRoomId: (roomId: string) => void;
     connect: () => void;
     disconnect: () => void;
+    sendData: (data: unknown) => void;
+    onDataReceived: (callback: (data: unknown) => void) => void;
+    getDataChannelState: () => RTCDataChannelState | null;
 }
 
 interface RemoteFeedProps {
@@ -18,6 +21,7 @@ const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
         const [peer, setPeer] = useState<WebRTCPeer | null>(null);
         const [roomId, setRoomId] = useState<string>('');
         const [isConnected, setIsConnected] = useState(false);
+        const dataCallbackRef = useRef<((data: unknown) => void) | null>(null);
 
         const connect = () => {
             if (!roomId || !localStream) {
@@ -31,19 +35,33 @@ const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
                 setPeer(null);
             }
 
-            const newPeer = new WebRTCPeer(roomId, peerId, (remoteStream) => {
-                if (remoteVideoRef.current) {
-                    remoteVideoRef.current.srcObject = remoteStream;
+            const newPeer = new WebRTCPeer(
+                roomId,
+                peerId,
+                (remoteStream) => {
+                    if (remoteVideoRef.current) {
+                        remoteVideoRef.current.srcObject = remoteStream;
+                    }
+                },
+                (data) => {
+                    // Call the registered callback when data is received
+                    if (dataCallbackRef.current) {
+                        dataCallbackRef.current(data);
+                    }
                 }
-            });
+            );
 
             newPeer.addLocalStream(localStream);
 
-            // Send ready signal if callee, or create offer if caller
+            // Create data channel if caller
+            if (peerId === 'caller') {
+                newPeer.createDataChannel();
+                // Don't create offer here - wait for callee's ready signal
+            }
+
+            // Send ready signal if callee
             if (peerId === 'callee') {
                 newPeer.sendReady();
-            } else if (peerId === 'caller') {
-                newPeer.createOffer();
             }
 
             setPeer(newPeer);
@@ -67,7 +85,23 @@ const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
                 setRoomId(newRoomId);
             },
             connect,
-            disconnect
+            disconnect,
+            sendData: (data: unknown) => {
+                if (!peer) {
+                    console.error('Peer connection not established');
+                    return;
+                }
+                peer.sendData(data);
+            },
+            onDataReceived: (callback: (data: unknown) => void) => {
+                dataCallbackRef.current = callback;
+            },
+            getDataChannelState: () => {
+                if (!peer) {
+                    return null;
+                }
+                return peer.getDataChannelState();
+            }
         }));
 
         // Clean up on unmount
@@ -95,7 +129,7 @@ const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
 
         return (
             <div className="flex flex-col gap-4">
-                <div className="relative h-[50vh] w-[360px]">
+                <div className="relative h-[50vh] w-[40vw]">
                     <h3 className="text-lg font-semibold mb-2">Remote Feed</h3>
                     <video
                         ref={remoteVideoRef}
