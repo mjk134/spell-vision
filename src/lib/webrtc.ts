@@ -34,7 +34,8 @@ export class WebRTCSignaling {
       snapshot.docChanges().forEach((change) => {
         if (change.type === 'added') {
           const message = change.doc.data() as SignalingMessage;
-          if (message.to === this.peerId || message.to === 'all') {
+          // Accept messages addressed to this peer, 'all', or 'other' (when not from self)
+          if (message.to === this.peerId || message.to === 'all' || (message.to === 'other' && message.from !== this.peerId)) {
             this.onMessage(message);
             // Clean up message after processing
             deleteDoc(change.doc.ref);
@@ -54,10 +55,13 @@ export class WebRTCPeer {
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream = new MediaStream();
   private onRemoteStream: (stream: MediaStream) => void;
+  private dataChannel: RTCDataChannel | null = null;
+  private onDataReceived?: (data: unknown) => void;
 
-  constructor(roomId: string, peerId: string, onRemoteStream: (stream: MediaStream) => void) {
+  constructor(roomId: string, peerId: string, onRemoteStream: (stream: MediaStream) => void, onDataReceived?: (data: unknown) => void) {
     this.peerId = peerId;
     this.onRemoteStream = onRemoteStream;
+    this.onDataReceived = onDataReceived;
     this.peerConnection = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' }
@@ -68,18 +72,40 @@ export class WebRTCPeer {
 
     this.peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
+        const targetPeer = peerId === 'caller' ? 'callee' : 'caller';
         this.signaling.sendMessage({
           type: 'ice-candidate',
           data: event.candidate.toJSON(),
           from: peerId,
-          to: 'other'
+          to: targetPeer
         });
       }
     };
 
     this.peerConnection.ontrack = (event) => {
+      console.log(`[${this.peerId}] Received remote track`);
       this.remoteStream.addTrack(event.track);
       this.onRemoteStream(this.remoteStream);
+    };
+
+    // Handle incoming data channels
+    this.peerConnection.ondatachannel = (event) => {
+      console.log(`[${this.peerId}] Received data channel`);
+      this.dataChannel = event.channel;
+      this.setupDataChannelListeners();
+    };
+
+    // Monitor connection state
+    this.peerConnection.onconnectionstatechange = () => {
+      console.log(`[${this.peerId}] Connection state changed to:`, this.peerConnection.connectionState);
+    };
+
+    this.peerConnection.oniceconnectionstatechange = () => {
+      console.log(`[${this.peerId}] ICE connection state changed to:`, this.peerConnection.iceConnectionState);
+    };
+
+    this.peerConnection.onsignalingstatechange = () => {
+      console.log(`[${this.peerId}] Signaling state changed to:`, this.peerConnection.signalingState);
     };
   }
 
@@ -90,9 +116,76 @@ export class WebRTCPeer {
     });
   }
 
+  private setupDataChannelListeners() {
+    if (!this.dataChannel) return;
+
+    this.dataChannel.onopen = () => {
+      console.log('Data channel opened');
+    };
+
+    this.dataChannel.onclose = () => {
+      console.log('Data channel closed');
+    };
+
+    this.dataChannel.onerror = (error) => {
+      console.error('Data channel error:', error);
+    };
+
+    this.dataChannel.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (this.onDataReceived) {
+          this.onDataReceived(data);
+        }
+      } catch (error) {
+        console.error('Failed to parse data channel message:', error);
+      }
+    };
+  }
+
+  createDataChannel(label = 'data'): RTCDataChannel {
+    if (this.dataChannel) {
+      return this.dataChannel;
+    }
+    this.dataChannel = this.peerConnection.createDataChannel(label);
+    this.setupDataChannelListeners();
+    return this.dataChannel;
+  }
+
+  sendData(data: unknown): void {
+    if (!this.dataChannel) {
+      console.error('Data channel not initialized');
+      return;
+    }
+    if (this.dataChannel.readyState !== 'open') {
+      console.error('Data channel is not open');
+      return;
+    }
+    try {
+      const jsonString = JSON.stringify(data);
+      this.dataChannel.send(jsonString);
+    } catch (error) {
+      console.error('Failed to send data:', error);
+    }
+  }
+
+  getDataChannelState(): RTCDataChannelState | null {
+    return this.dataChannel?.readyState ?? null;
+  }
+
   async createOffer() {
+    console.log(`[${this.peerId}] Creating offer, connection state:`, this.peerConnection.connectionState, 'signaling state:', this.peerConnection.signalingState);
+    if (this.peerConnection.connectionState === 'closed' || this.peerConnection.connectionState === 'failed') {
+      console.error('Cannot create offer: peer connection is closed or failed');
+      return;
+    }
+    if (this.peerConnection.signalingState !== 'stable') {
+      console.warn('Cannot create offer: signaling state is', this.peerConnection.signalingState);
+      return;
+    }
     const offer = await this.peerConnection.createOffer();
     await this.peerConnection.setLocalDescription(offer);
+    console.log(`[${this.peerId}] Offer created and set as local description`);
     this.signaling.sendMessage({
       type: 'offer',
       data: { type: offer.type, sdp: offer.sdp },
@@ -102,8 +195,14 @@ export class WebRTCPeer {
   }
 
   async createAnswer() {
+    console.log(`[${this.peerId}] Creating answer`);
+    if (this.peerConnection.connectionState === 'closed' || this.peerConnection.connectionState === 'failed') {
+      console.error('Cannot create answer: peer connection is closed or failed');
+      return;
+    }
     const answer = await this.peerConnection.createAnswer();
     await this.peerConnection.setLocalDescription(answer);
+    console.log(`[${this.peerId}] Answer created and set as local description`);
     this.signaling.sendMessage({
       type: 'answer',
       data: { type: answer.type, sdp: answer.sdp },
@@ -122,23 +221,35 @@ export class WebRTCPeer {
   }
 
   private async handleSignalingMessage(message: SignalingMessage) {
+    console.log(`[${this.peerId}] Received signaling message:`, message.type, 'from', message.from);
+
+    // Ignore messages if connection is closed or failed
+    if (this.peerConnection.connectionState === 'closed' || this.peerConnection.connectionState === 'failed') {
+      console.warn('Ignoring signaling message: peer connection is closed or failed');
+      return;
+    }
+
     switch (message.type) {
       case 'offer':
+        console.log(`[${this.peerId}] Processing offer, current signaling state:`, this.peerConnection.signalingState);
         if (this.peerConnection.signalingState === 'stable') {
           await this.peerConnection.setRemoteDescription(new RTCSessionDescription(message.data));
           await this.createAnswer();
         }
         break;
       case 'answer':
+        console.log(`[${this.peerId}] Processing answer, current signaling state:`, this.peerConnection.signalingState);
         if (this.peerConnection.signalingState === 'have-local-offer') {
           await this.peerConnection.setRemoteDescription(new RTCSessionDescription(message.data));
         }
         break;
       case 'ice-candidate':
+        console.log(`[${this.peerId}] Adding ICE candidate`);
         await this.peerConnection.addIceCandidate(new RTCIceCandidate(message.data));
         break;
       case 'ready':
-        if (this.peerId === 'caller') {
+        console.log(`[${this.peerId}] Received ready signal, current signaling state:`, this.peerConnection.signalingState);
+        if (this.peerId === 'caller' && this.peerConnection.signalingState === 'stable') {
           this.createOffer();
         }
         break;
@@ -149,3 +260,4 @@ export class WebRTCPeer {
     this.peerConnection.close();
   }
 }
+

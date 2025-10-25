@@ -10,7 +10,7 @@ function LocalWebcamFeed({ stream }: { stream: MediaStream | null }) {
     }, [stream]);
 
     return (
-        <div className="relative h-[50vh] w-[360px]">
+        <div className="relative h-[50vh] w-[40vw]">
             <video
                 ref={videoRef}
                 autoPlay
