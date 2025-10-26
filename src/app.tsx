@@ -258,6 +258,33 @@ function App() {
             </div>
           </div>
         </div>
+        <h2 className="font-mono text-2xl">Your Gestures</h2>
+        <div className="grid grid-cols-2 w-full h-full">
+         <div className="flex flex-row gap-2 items-center h-[30%]">
+          {gameRef.current?.targetFireSequence.map((g, i) => {
+              return (
+                <img key={i} src={`${g}.svg`} />
+              )
+            })}
+            <span className="font-mono text-6xl pl-4 text-gray-200">→ 🔥</span>
+         </div>
+         <div className="flex flex-row gap-2 items-center h-[30%]">
+          {gameRef.current?.targetWaterSequence.map((g, i) => {
+              return (
+                <img key={i} src={`${g}.svg`} />
+              )
+            })}
+            <span className="font-mono text-6xl pl-4 text-gray-200">→ 💧</span>
+         </div>
+         <div className="flex flex-row gap-2 items-center h-[30%]">
+          {gameRef.current?.targetPlantSequence.map((g, i) => {
+              return (
+                <img key={i} src={`${g}.svg`} />
+              )
+            })}
+            <span className="font-mono text-6xl pl-4 text-gray-200">→ 🌱</span>
+         </div>
+        </div>
       </div>
     </main>
   )
