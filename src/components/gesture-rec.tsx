@@ -128,7 +128,7 @@ export default function HandRecogniser(stream: videoStream) {
                 const gestures = (res.gestures?.map(g => g[0]?.categoryName || 'none') || []) as Gesture[]
 
                 if (gestures !== currentGestures){
-                    console.log(gestures)
+                    // console.log(gestures)
                     setCurrentGestures(gestures)
                 }
 

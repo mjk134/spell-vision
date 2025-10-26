@@ -1,13 +1,10 @@
 import Statbar from "./components/stat-bar"
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { useRef, useEffect, useState } from 'react';
 import RemoteFeed from './components/remote-feed';
@@ -47,8 +44,11 @@ function App() {
     }
   }, [isConnected])
 
-  const handleConnect = () => {
-    if (!roomId.trim()) {
+  const handleConnect = (connectRoomId?: string, connectPeerId?: 'caller' | 'callee') => {
+    const roomToConnect = connectRoomId || roomId;
+    const peerToUse = connectPeerId || peerId;
+
+    if (!roomToConnect.trim()) {
       toast.error('Please enter a room ID');
       return;
     }
@@ -57,7 +57,11 @@ function App() {
       return;
     }
 
-    remoteFeedRef.current?.connect(roomId);
+    // Update state for UI
+    setRoomId(roomToConnect);
+    setPeerId(peerToUse);
+
+    remoteFeedRef.current?.connect(roomToConnect, peerToUse);
     setIsConnected(true);
     toast.success('Connecting to room...');
   };
@@ -74,9 +78,7 @@ function App() {
       return;
     }
 
-    setPeerId('callee')
-    setRoomId(joinCode)
-    handleConnect();
+    handleConnect(joinCode, 'callee');
   }
 
   const sendTestData = () => {
@@ -110,8 +112,7 @@ function App() {
             <div className="flex flex-col gap-5 mt-4">
               <button className="bg-gray-200 text-gray-900 font-mono py-3 text-xl cursor-pointer" onClick={() => {
                 const id = createId()
-                setRoomId(id)
-                handleConnect()
+                handleConnect(id, 'caller')
               }}>
                 Create Game
               </button>

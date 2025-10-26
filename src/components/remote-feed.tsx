@@ -9,7 +9,7 @@ import { WebRTCPeer } from "../lib/webrtc";
  * Using a ref allows the parent to call methods on this child component.
  */
 export interface RemoteFeedHandle {
-    connect: (roomId: string) => void;      // Start WebRTC connection
+    connect: (roomId: string, peerId: 'caller' | 'callee') => void;  // Start WebRTC connection
     disconnect: () => void;                 // Stop WebRTC connection
     sendData: (data: unknown) => void;      // Send data through data channel
     onDataReceived: (callback: (data: unknown) => void) => void;  // Register callback for incoming data
@@ -62,7 +62,7 @@ const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
          * 6. If caller: Create data channel and wait for callee
          * 7. If callee: Send "ready" signal to start the handshake
          */
-        const connect = async (newRoomId: string) => {
+        const connect = async (newRoomId: string, connectPeerId: 'caller' | 'callee') => {
             // Get the current stream from the ref
             // (HandRecogniser sets this asynchronously after canvas is ready)
             const localStream = localStreamRef.current;
@@ -82,20 +82,24 @@ const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
                 setPeer(null);
             }
 
+            console.log("peer id:", connectPeerId);
+
             // Create new WebRTC peer instance
             // Pass callbacks for handling remote stream and data
             const newPeer = new WebRTCPeer(
                 newRoomId,
-                peerId,
+                connectPeerId,
                 // Callback when remote stream arrives
                 (remoteStream) => {
                     // Set the remote stream as the source of our <video> element
+                  console.log('Received remote stream:', remoteStream);
                     if (remoteVideoRef.current) {
                         remoteVideoRef.current.srcObject = remoteStream;
                     }
                 },
                 // Callback when data arrives via data channel
                 (data) => {
+                    console.log('Received data from peer:', data);
                     // If parent registered a callback, call it
                     if (dataCallbackRef.current) {
                         dataCallbackRef.current(data);
@@ -112,7 +116,7 @@ const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
 
             // === CALLER vs CALLEE behavior ===
 
-            if (peerId === 'caller') {
+            if (connectPeerId === 'caller') {
                 // CALLER: Create data channel and wait
                 // Must create data channel BEFORE making the offer
                 newPeer.createDataChannel();
@@ -120,10 +124,14 @@ const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
                 // The caller will create the offer when they receive callee's "ready" signal
             }
 
-            if (peerId === 'callee') {
+            if (connectPeerId === 'callee') {
                 // CALLEE: Send ready signal
                 // This tells the caller "I'm ready, you can send me an offer now"
                 console.log('[Callee] Sending ready signal to caller');
+
+                // Small delay to ensure caller's listener is fully established
+                await new Promise(resolve => setTimeout(resolve, 100));
+
                 await newPeer.sendReady();
                 // After this, we wait for the caller's offer
             }

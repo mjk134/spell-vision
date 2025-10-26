@@ -44,15 +44,21 @@ export class WebRTCSignaling {
   /**
    * init(): Prepare for messaging
    *
-   * Step 1: Clean up any old messages from previous sessions
+   * Step 1: Start listening for messages FIRST
+   * - We start the listener immediately to avoid missing any messages
+   *
+   * Step 2: Clean up any old messages from previous sessions
    * - If you reconnect to the same room, old messages might still exist in Firestore
    * - These old messages would confuse the new connection attempt
-   * - So we delete ALL existing messages before we start listening
-   *
-   * Step 2: Start listening for NEW messages
-   * - After cleanup, we know any new message that appears is fresh and relevant
+   * - So we delete ALL existing messages after we start listening
+   * - The listener will ignore the delete operations (only cares about 'added')
    */
   async init() {
+    console.log(`[${this.peerId}] Starting listener first...`);
+
+    // Start listening BEFORE cleanup to avoid race conditions
+    this.listenForMessages();
+
     console.log(`[${this.peerId}] Cleaning up old messages...`);
 
     // Get reference to this room's message collection in Firestore
@@ -69,10 +75,7 @@ export class WebRTCSignaling {
 
     // Wait for all deletions to complete
     await Promise.all(deletePromises);
-    console.log(`[${this.peerId}] Cleanup done, starting to listen...`);
-
-    // Now it's safe to start listening - any message we see will be fresh
-    this.listenForMessages();
+    console.log(`[${this.peerId}] Cleanup done, listener active`);
   }
 
   /**
@@ -199,6 +202,7 @@ export class WebRTCPeer {
      * They'll try all candidates until one works!
      */
     this.peerConnection.onicecandidate = (event) => {
+      console.log(`[${this.peerId}] 🧊 ICE candidate found`);
       if (event.candidate) {
         // Found a network path! Send it to the other peer
         const targetPeer = peerId === 'caller' ? 'callee' : 'caller';
@@ -301,6 +305,7 @@ export class WebRTCPeer {
 
     // Received data from other peer
     this.dataChannel.onmessage = (event) => {
+      console.log(`[${this.peerId}] 💬 Data received:`, event.data);
       if (this.onDataReceived) {
         this.onDataReceived(JSON.parse(event.data));
       }
@@ -431,6 +436,7 @@ export class WebRTCPeer {
    * Uses the data channel (not the video/audio stream)
    */
   sendData(data: unknown): void {
+    console.log(`[${this.peerId}] 💬 Sending data:`, data);
     if (this.dataChannel?.readyState === 'open') {
       this.dataChannel.send(JSON.stringify(data));
     }
