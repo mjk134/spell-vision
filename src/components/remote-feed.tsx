@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from "react";
 import { WebRTCPeer } from "../lib/webrtc";
+import type {Gesture} from "@/components/gesture-rec.tsx";
 
 /**
  * RemoteFeedHandle: Methods exposed to parent component via ref
@@ -9,19 +10,20 @@ import { WebRTCPeer } from "../lib/webrtc";
  * Using a ref allows the parent to call methods on this child component.
  */
 export interface RemoteFeedHandle {
-    connect: (roomId: string, peerId: 'caller' | 'callee') => void;  // Start WebRTC connection
-    disconnect: () => void;                 // Stop WebRTC connection
-    sendData: (data: unknown) => void;      // Send data through data channel
-    onDataReceived: (callback: (data: unknown) => void) => void;  // Register callback for incoming data
-    getDataChannelState: () => RTCDataChannelState | null;        // Check if data channel is open
+  connect: (roomId: string, peerId: 'caller' | 'callee') => void;  // Start WebRTC connection
+  disconnect: () => void;                 // Stop WebRTC connection
+  sendData: (data: unknown) => void;      // Send data through data channel
+  onDataReceived: (callback: (data: unknown) => void) => void;  // Register callback for incoming data
+  getDataChannelState: () => RTCDataChannelState | null;        // Check if data channel is open
 }
 
 /**
  * RemoteFeedProps: Props passed from parent
  */
 interface RemoteFeedProps {
-    localStreamRef: React.RefObject<MediaStream | null>;  // Our webcam stream (from HandRecogniser)
-    peerId?: string;                                       // Are we 'caller' or 'callee'?
+  localStreamRef: React.RefObject<MediaStream | null>;  // Our webcam stream (from HandRecogniser)
+  peerId?: string;                                       // Are we 'caller' or 'callee'?
+  gestures: Gesture[];                                   // Current detected gestures
 }
 
 /**
@@ -39,7 +41,7 @@ interface RemoteFeedProps {
  * - Video element displays the remote stream
  */
 const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
-    ({ localStreamRef, peerId = 'callee' }, ref) => {
+    ({ localStreamRef, gestures: _gestures }, ref) => {
         // === Component State ===
 
         const remoteVideoRef = useRef<HTMLVideoElement | null>(null);  // Reference to <video> element

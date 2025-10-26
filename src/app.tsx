@@ -6,32 +6,109 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { useRef, useEffect, useState } from 'react';
+import {useRef, useEffect, useState} from 'react';
 import RemoteFeed from './components/remote-feed';
 import type { RemoteFeedHandle } from './components/remote-feed';
 import { toast } from 'sonner';
-import HandRecogniser from "./components/gesture-rec.tsx";
+import HandRecogniser, {type Gesture, GESTURES} from "./components/gesture-rec.tsx";
 import createId from "./lib/cuid.ts";
-
-
-
+import { Game, type SpellKind } from "./lib/game.ts";
 
 function App() {
   const remoteFeedRef = useRef<RemoteFeedHandle>(null);
   const handRecogniserStreamRef = useRef<MediaStream | null>(null);
+  const gameRef = useRef<Game | null>(null);
   const [roomId, setRoomId] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [peerId, setPeerId] = useState<'caller' | 'callee'>('caller');
   const [open, setOpen] = useState(true)
   // Is this redundant?
   const [joinCode, setJoinCode] = useState('')
+  const [gestures, setGestures] = useState<Gesture[]>([GESTURES.none]);
+  const [health, setHealth] = useState(100);
+  // @ts-expect-error - Mana system not yet implemented in Game class
+  const [mana, setMana] = useState(100);
+  const [opponentHealth, setOpponentHealth] = useState(100);
+  const lastGestureRef = useRef<Gesture>(GESTURES.none);
+
+  // Initialize game instance
+  useEffect(() => {
+    gameRef.current = new Game();
+
+    // Set up callback for when we cast a spell
+    gameRef.current.onSpellCast((spell: SpellKind) => {
+      console.log('Spell cast:', spell);
+      toast.success(`Cast spell: ${spell}`);
+
+      // Send spell to opponent via data channel
+      if (remoteFeedRef.current) {
+        remoteFeedRef.current.sendData({
+          type: 'spell',
+          spell: spell,
+          timestamp: Date.now()
+        });
+      }
+    });
+
+    // Set up callback for health changes
+    gameRef.current.onHealthChange((newHealth: number) => {
+      setHealth(newHealth);
+
+      // Send health update to opponent
+      if (remoteFeedRef.current) {
+        remoteFeedRef.current.sendData({
+          type: 'healthUpdate',
+          health: newHealth,
+          timestamp: Date.now()
+        });
+      }
+    });
+
+    // Set up callback for losing
+    gameRef.current.onLose(() => {
+      toast.error('You lost!');
+    });
+  }, []);
+
+  // Process gestures through game state
+  useEffect(() => {
+    if (!gameRef.current || gestures.length === 0) return;
+
+    const currentGesture = gestures[0];
+
+    // Only process if gesture changed and is not 'none'
+    if (currentGesture !== lastGestureRef.current && currentGesture !== GESTURES.none) {
+      console.log('Processing gesture:', currentGesture);
+      gameRef.current.processGesture(currentGesture);
+      lastGestureRef.current = currentGesture;
+    } else if (currentGesture === GESTURES.none) {
+      lastGestureRef.current = GESTURES.none;
+    }
+  }, [gestures]);
 
   // HandRecogniser will manage its own webcam initialization
   useEffect(() => {
     if (remoteFeedRef.current) {
       remoteFeedRef.current.onDataReceived((data) => {
         console.log('Received data from peer:', data);
-        toast.success(`Received: ${JSON.stringify(data)}`);
+
+        // Handle incoming spell from opponent
+        if (typeof data === 'object' && data !== null && 'type' in data) {
+          if (data.type === 'spell' && 'spell' in data) {
+            const spell = data.spell as SpellKind;
+            toast.info(`Opponent cast spell: ${spell}`);
+
+            if (gameRef.current) {
+              gameRef.current.opponentCastSpell(spell);
+            }
+          } else if (data.type === 'healthUpdate' && 'health' in data) {
+            // Update opponent's health display
+            const health = data.health as number;
+            setOpponentHealth(health);
+          }
+        } else {
+          toast.success(`Received: ${JSON.stringify(data)}`);
+        }
       });
     }
   }, []);
@@ -66,6 +143,7 @@ function App() {
     toast.success('Connecting to room...');
   };
 
+  // @ts-expect-error - Utility function for future use
   const handleDisconnect = () => {
     remoteFeedRef.current?.disconnect();
     setIsConnected(false);
@@ -81,6 +159,7 @@ function App() {
     handleConnect(joinCode, 'callee');
   }
 
+  // @ts-expect-error - Utility function for testing data channel
   const sendTestData = () => {
     const state = remoteFeedRef.current?.getDataChannelState();
     if (state !== 'open') {
@@ -145,16 +224,16 @@ function App() {
           <div className="flex flex-col w-[40%] h-full max-h-full gap-10">
             {/* Local Player stream*/}
             {/* <div className="bg-gray-300 h-[28vmin]" /> */}
-            <HandRecogniser stream={handRecogniserStreamRef} />
+            <HandRecogniser stream={handRecogniserStreamRef} setGestures={setGestures}/>
             {/* Local Player HP */}
             <div className="flex flex-row items-center justify-between gap-4 text-gray-200 w-full h-[4vh]">
-              <Statbar progress={50} totalProgress={100} />
-              <p className="font-mono text-2xl w-[40%]">HP 100</p>
+              <Statbar progress={health} totalProgress={100} />
+              <p className="font-mono text-2xl w-[40%]">HP {health}</p>
             </div>
             {/* local Player MP/*/}
             <div className="flex flex-row items-center justify-between gap-4 text-gray-200 w-full h-[4vh]">
-              <Statbar progress={50} totalProgress={100} />
-              <p className="font-mono text-2xl w-[40%]">MP 50</p>
+              <Statbar progress={mana} totalProgress={100} />
+              <p className="font-mono text-2xl w-[40%]">MP {mana}</p>
             </div>
           </div>
           <h1 className="font-display text-gray-200">VS</h1>
@@ -165,11 +244,12 @@ function App() {
               ref={remoteFeedRef}
               localStreamRef={handRecogniserStreamRef}
               peerId={peerId}
+              gestures={gestures}
             />
             {/* Player HP for remote */}
             <div className="flex flex-row items-center justify-between gap-4 text-gray-200 w-full h-[4vh]">
-              <Statbar progress={50} totalProgress={100} />
-              <p className="font-mono text-2xl w-[40%]">HP 100</p>
+              <Statbar progress={opponentHealth} totalProgress={100} />
+              <p className="font-mono text-2xl w-[40%]">HP {opponentHealth}</p>
             </div>
             {/* Player MP for remote */}
             <div className="flex flex-row items-center justify-between gap-4 text-gray-200 w-full h-[4vh]">

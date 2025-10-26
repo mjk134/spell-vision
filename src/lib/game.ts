@@ -22,6 +22,7 @@ export class Game {
   private onSpellCastCallbacks: Array<(spell: SpellKind) => void> = [];
   private onHealthChangeCallbacks: Array<(health: number) => void> = [];
   private onLoseCallbacks: Array<() => void> = [];
+  private onOpponentHealthChangeCallbacks: Array<(health: number) => void> = [];
 
   private fireInterval: number | undefined = undefined;
 
@@ -41,6 +42,12 @@ export class Game {
     this.targetWaterSequence = waterSeq;
     this.targetPlantSequence = plantSeq;
 
+    console.log("current sequences:", {
+      fire: this.targetFireSequence,
+      water: this.targetWaterSequence,
+      plant: this.targetPlantSequence,
+    });
+
     this.targetSpells = [
       spellKind.fire,
       spellKind.water,
@@ -50,14 +57,22 @@ export class Game {
 
   private getRandomSequence(): Array<Gesture> {
     // generate an array of 3 random gestures, make sure the same type are not
-    // next to each other
+    // next to each other. Also no Nones
+    const possibleGestures = [
+      GESTURES.closed_fist,
+      GESTURES.open_palm,
+      GESTURES.thumb_up,
+      GESTURES.victory,
+      GESTURES.thumb_down,
+      GESTURES.iloveyou,
+      GESTURES.pointing_up,
+    ];
     const sequence: Array<Gesture> = [];
-    const gestureValues = Object.values(GESTURES);
     while (sequence.length < 3) {
-      const randomGesture =
-        gestureValues[Math.floor(Math.random() * gestureValues.length)];
-      if (sequence.length === 0 || sequence[sequence.length - 1] !== randomGesture) {
-        sequence.push(randomGesture);
+      const randIndex = Math.floor(Math.random() * possibleGestures.length);
+      const gesture = possibleGestures[randIndex];
+      if (sequence.length === 0 || sequence[sequence.length - 1] !== gesture) {
+        sequence.push(gesture);
       }
     }
     return sequence;
@@ -126,6 +141,12 @@ export class Game {
     } else {
       this.currentIndex++;
     }
+
+    console.log("New sequences:", {
+      fire: this.targetFireSequence,
+      water: this.targetWaterSequence,
+      plant: this.targetPlantSequence,
+    });
   }
 
   private heal(amount: number) {
@@ -176,5 +197,9 @@ export class Game {
 
   public onLose(callback: () => void) {
     this.onLoseCallbacks.push(callback);
+  }
+
+  public onOpponentHealthChange(callback: (health: number) => void) {
+    this.onOpponentHealthChangeCallbacks.push(callback);
   }
 }

@@ -3,7 +3,7 @@ import { getWebcam } from "../lib/webcam";
 import React, { useEffect, useRef, useState } from "react";
 
 export interface videoStream{
-   stream: React.RefObject<MediaStream | null>;
+  stream: React.RefObject<MediaStream | null>;
 }
 
 export const GESTURES = {
@@ -19,7 +19,7 @@ export const GESTURES = {
 
 export type Gesture = typeof GESTURES[keyof typeof GESTURES];
 
-export default function HandRecogniser(stream: videoStream) {
+export default function HandRecogniser({stream, setGestures}: {stream: React.RefObject<MediaStream | null>, setGestures: (gestures: Gesture[])=>void}) {
     const videoRef = useRef<HTMLVideoElement | null>(null)
     const canvasRef = useRef<HTMLCanvasElement | null>(null)
     const gestureRecogniserRef = useRef<GestureRecognizer | null>(null)
@@ -56,12 +56,12 @@ export default function HandRecogniser(stream: videoStream) {
                     delegate: "CPU"  // Model uses CPU-only ops anyway
                 },
                 runningMode: "VIDEO",
-                numHands: 2  // Enable detection of up to 2 hands
+                numHands: 1  // Enable detection of up to 2 hands
             });
             console.log("GestureRecognizer created successfully");
             setRecognizerReady(true);
             if (canvasRef.current){
-                stream.stream.current = canvasRef.current.captureStream();
+                stream.current = canvasRef.current.captureStream();
             }
         }
 
@@ -136,7 +136,7 @@ export default function HandRecogniser(stream: videoStream) {
                 const gestures = (res.gestures?.map(g => g[0]?.categoryName || 'none') || []) as Gesture[]
 
                 if (gestures !== currentGestures){
-                    // console.log(gestures)
+                    setGestures(gestures);
                     setCurrentGestures(gestures)
                 }
 
