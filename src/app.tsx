@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import HandRecogniser, {type Gesture, GESTURES} from "./components/gesture-rec.tsx";
 import createId from "./lib/cuid.ts";
 import { Game, type SpellKind } from "./lib/game.ts";
+import { cn } from "./lib/utils.ts";
 
 function App() {
   const remoteFeedRef = useRef<RemoteFeedHandle>(null);
@@ -143,7 +144,6 @@ function App() {
     toast.success('Connecting to room...');
   };
 
-  // @ts-expect-error - Utility function for future use
   const handleDisconnect = () => {
     remoteFeedRef.current?.disconnect();
     setIsConnected(false);
@@ -214,7 +214,9 @@ function App() {
       </Dialog>
       <h1 className="text-gray-200 text-6xl">Spell Vision</h1>
       <p className="font-mono text-gray-200">Created by: username, username & username</p>
-      <p className="font-mono text-gray-600 text-xs">Room code: {roomId}</p>
+      <div className="flex flex-row items-center gap-2">
+        <p className="font-mono text-gray-600 text-xs">Room code: {roomId}</p>
+      </div>
       <div className="relative p-8 flex items-center flex-col h-[90vh] w-full gap-2 margin-20">
         {/* Dashed border with custom dashes */}
         <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -263,7 +265,9 @@ function App() {
          <div className="flex flex-row gap-2 items-center h-[30%]">
           {gameRef.current?.targetFireSequence.map((g, i) => {
               return (
-                <img key={i} src={`${g}.svg`} />
+                <div className={cn(g === lastGestureRef.current ? 'bg-amber-200' : '')}>
+                  <img key={i} src={`${g}.svg`} />
+                </div>
               )
             })}
             <span className="font-mono text-6xl pl-4 text-gray-200">→ 🔥</span>
@@ -271,7 +275,9 @@ function App() {
          <div className="flex flex-row gap-2 items-center h-[30%]">
           {gameRef.current?.targetWaterSequence.map((g, i) => {
               return (
-                <img key={i} src={`${g}.svg`} />
+                <div className={cn(g === lastGestureRef.current ? 'bg-amber-200' : '')}>
+                  <img key={i} src={`${g}.svg`} />
+                </div>
               )
             })}
             <span className="font-mono text-6xl pl-4 text-gray-200">→ 💧</span>
@@ -279,14 +285,20 @@ function App() {
          <div className="flex flex-row gap-2 items-center h-[30%]">
           {gameRef.current?.targetPlantSequence.map((g, i) => {
               return (
-                <img key={i} src={`${g}.svg`} />
+                <div className={cn(g === lastGestureRef.current ? 'bg-amber-200' : '')}>
+                  <img key={i} src={`${g}.svg`} />
+                </div>
               )
             })}
             <span className="font-mono text-6xl pl-4 text-gray-200">→ 🌱</span>
          </div>
-         <div className="text-gray-200 text-3xl">
-            {lastGestureRef.current}
+         <div className="relative text-gray-200 font-mono text-2xl flex flex-row gap-2 justify-center">
+          Gesture:
+          <div className="">
+            {lastGestureRef.current == GESTURES.none ? 'No gesture' : <img src={`${lastGestureRef.current}.svg`} />}
+          </div>
          </div>
+        <div className="col-span-2 flex items-center justify-center">{isConnected && (<button onClick={() => handleDisconnect()} className="text-gray-600 p-5 bg-gray-200">Disconnect</button>)}</div>
         </div>
       </div>
     </main>
