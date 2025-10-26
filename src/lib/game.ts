@@ -27,7 +27,6 @@ export class Game {
   private onOpponentHealthChangeCallbacks: Array<(health: number) => void> = [];
 
   private fireInterval: number | undefined = undefined;
-  private manaInterval: number | undefined = undefined;
 
   constructor() {
     // ensure the random sequences do not match
@@ -57,7 +56,7 @@ export class Game {
       spellKind.plant,
     ];
 
-    this.manaInterval = setInterval(()=>{
+    setInterval(()=>{
       if (this.mana<100)
         this.increaseMana(10);
     }, 1000)
