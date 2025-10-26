@@ -27,6 +27,7 @@ export class Game {
   private onOpponentHealthChangeCallbacks: Array<(health: number) => void> = [];
 
   private fireInterval: number | undefined = undefined;
+  private manaInterval: number | undefined = undefined;
 
   constructor() {
     // ensure the random sequences do not match
@@ -55,6 +56,11 @@ export class Game {
       spellKind.water,
       spellKind.plant,
     ];
+
+    this.manaInterval = setInterval(()=>{
+      if (this.mana<100)
+        this.increaseMana(10);
+    }, 1000)
   }
 
   private getRandomSequence(): Array<Gesture> {
@@ -180,9 +186,14 @@ export class Game {
 
   private reduceMana(amount: number){
     this.mana -= amount;
-    console.log("new mana:" + this.mana);
     if (this.mana < 0) this.mana = 0
     this.onManaChangeCallbacks.forEach(callback => callback(this.mana))
+  }
+
+  private increaseMana(amount: number) {
+    this.mana+=amount;
+    if (this.mana > 100) this.mana = 100
+    this.onManaChangeCallbacks.forEach(callback=>callback(this.mana))
   }
 
   public opponentCastSpell(spell: SpellKind) {
