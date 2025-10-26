@@ -115,6 +115,14 @@ export default function HandRecogniser(stream: videoStream) {
                 return;
             }
 
+            // Sync canvas size with video on each frame
+            const video = videoRef.current;
+            const canvas = canvasRef.current;
+            if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+            }
+
             // Use performance.now() as the timestamp for video-based models
             const nowInMs = performance.now();
             const res = gestureRecogniserRef.current.recognizeForVideo(videoRef.current, nowInMs);
@@ -166,29 +174,20 @@ useEffect(() => {
       const canvas = canvasRef.current;
       if (!video || !canvas) return;
   
-      const dpr = window.devicePixelRatio || 1;
-      const width = video.clientWidth;
-      const height = video.clientHeight;
-  
-      // Visually match video
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-  
-      // Match drawing buffer to device pixels
-      canvas.width = Math.round(width * dpr);
-      canvas.height = Math.round(height * dpr);
-  
-      const ctx = canvas.getContext('2d');
-      if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // Set canvas internal resolution to match video
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
     };
   
     const v = videoRef.current;
     v?.addEventListener('loadedmetadata', syncCanvasSize);
+    v?.addEventListener('resize', syncCanvasSize);
     window.addEventListener('resize', syncCanvasSize);
     syncCanvasSize();
   
     return () => {
       v?.removeEventListener('loadedmetadata', syncCanvasSize);
+      v?.removeEventListener('resize', syncCanvasSize);
       window.removeEventListener('resize', syncCanvasSize);
     };
   }, []);
@@ -204,7 +203,7 @@ useEffect(() => {
       />
       <canvas
         ref={canvasRef}
-        className="pointer-events-none absolute inset-0 z-10 w-full h-full"
+        className="pointer-events-none absolute inset-0 z-10 w-full h-full object-contain"
       />
     </div>
   )
