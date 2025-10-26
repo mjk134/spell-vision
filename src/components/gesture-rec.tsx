@@ -19,7 +19,7 @@ export const GESTURES = {
 
 export type Gesture = typeof GESTURES[keyof typeof GESTURES];
 
-export default function HandRecogniser(stream:videoStream) {
+export default function HandRecogniser(stream: videoStream) {
     const videoRef = useRef<HTMLVideoElement | null>(null)
     const canvasRef = useRef<HTMLCanvasElement | null>(null)
     const gestureRecogniserRef = useRef<GestureRecognizer | null>(null)
@@ -160,15 +160,53 @@ export default function HandRecogniser(stream:videoStream) {
         }
     }
 
-    return (
-        <div style={{ position: 'relative', width: '640px', height: '480px' }}>
-            <canvas ref={canvasRef} style={{ position: 'absolute', left: 0, top: 0, zIndex: 2 }}></canvas>
-            <video 
-                ref={videoRef} 
-                style={{ position: 'absolute', left: 0, top: 0, zIndex: 1, width: '100%', height: '100%' }}
-                autoPlay 
-                playsInline
-            ></video>
-        </div>
-    )
+useEffect(() => {
+    const syncCanvasSize = () => {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!video || !canvas) return;
+  
+      const dpr = window.devicePixelRatio || 1;
+      const width = video.clientWidth;
+      const height = video.clientHeight;
+  
+      // Visually match video
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+  
+      // Match drawing buffer to device pixels
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+  
+      const ctx = canvas.getContext('2d');
+      if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+  
+    const v = videoRef.current;
+    v?.addEventListener('loadedmetadata', syncCanvasSize);
+    window.addEventListener('resize', syncCanvasSize);
+    syncCanvasSize();
+  
+    return () => {
+      v?.removeEventListener('loadedmetadata', syncCanvasSize);
+      window.removeEventListener('resize', syncCanvasSize);
+    };
+  }, []);
+  
+ 
+  return (
+    <div className="relative bg-gray-300 h-[28vmin] w-full overflow-hidden">
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        className="block w-full h-full object-contain"
+      />
+      <canvas
+        ref={canvasRef}
+        className="pointer-events-none absolute inset-0 z-10 w-full h-full"
+      />
+    </div>
+  )
+
 }

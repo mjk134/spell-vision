@@ -224,10 +224,7 @@ const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
          * Render: Display video element and connection status
          */
         return (
-            <div className="flex flex-col gap-4">
-                <div className="relative h-[50vh] w-[40vw]">
-                    <h3 className="text-lg font-semibold mb-2">Remote Feed</h3>
-
+            <div className="relative bg-gray-400 h-[28vmin]">
                     {/* Video element where remote peer's video will appear */}
                     <video
                         ref={remoteVideoRef}
@@ -247,7 +244,6 @@ const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
                         </div>
                     )}
                 </div>
-            </div>
         );
     }
 );
