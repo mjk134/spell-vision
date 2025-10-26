@@ -6,7 +6,7 @@ export interface videoStream{
    stream: React.RefObject<MediaStream | null>;
 }
 
-export const gestures = {
+export const GESTURES = {
     none: "None",
     closed_fist: "Closed_Fist",
     open_palm: "Open_Palm",
@@ -15,7 +15,9 @@ export const gestures = {
     thumb_up: "Thumb_Up",
     victory: "Victory",
     iloveyou: "ILoveYou",
-}
+} as const;
+
+export type Gesture = typeof GESTURES[keyof typeof GESTURES];
 
 export default function HandRecogniser(stream:videoStream) {
     const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -23,7 +25,7 @@ export default function HandRecogniser(stream:videoStream) {
     const gestureRecogniserRef = useRef<GestureRecognizer | null>(null)
     const [webCamRunning, setWebCamRunning] = useState(false);
     const [recognizerReady, setRecognizerReady] = useState(false);
-    const [currentGestures, setCurrentGestures] = useState([gestures.none,gestures.none])
+    const [currentGestures, setCurrentGestures] = useState<Gesture[]>([GESTURES.none, GESTURES.none])
 
     useEffect(() => {
         getWebcam().then((stream) => {
@@ -123,7 +125,7 @@ export default function HandRecogniser(stream:videoStream) {
                 const drawingUtils = new DrawingUtils(ctx);
                 ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
                 
-                let gestures = res.gestures?.map(g => g[0]?.categoryName || 'none')
+                const gestures = (res.gestures?.map(g => g[0]?.categoryName || 'none') || []) as Gesture[]
 
                 if (gestures !== currentGestures){
                     console.log(gestures)
