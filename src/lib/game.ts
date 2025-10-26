@@ -17,10 +17,12 @@ export class Game {
   public currentIndex: number = 0;
 
   public health: number = 100;
+  public mana = 100;
   public opponentHealth: number = 100;
 
   private onSpellCastCallbacks: Array<(spell: SpellKind) => void> = [];
   private onHealthChangeCallbacks: Array<(health: number) => void> = [];
+  private onManaChangeCallbacks: Array<(mana: number) => void> = [];
   private onLoseCallbacks: Array<() => void> = [];
   private onOpponentHealthChangeCallbacks: Array<(health: number) => void> = [];
 
@@ -107,8 +109,8 @@ export class Game {
       }
     }
 
-    if (matchingSpells.length === 0) {
-      // do nothing, no punishment for wrong gesture
+    if (matchingSpells.length === 0 || this.mana === 0) {
+      // do nothing, no punishment for wrong gesture or no mana
       return;
     }
     // update targetSpells to only include matching spells
@@ -121,9 +123,14 @@ export class Game {
         case spellKind.water:
           clearInterval(this.fireInterval);
           this.heal(5);
+          this.reduceMana(33);
           break;
         case spellKind.plant:
           this.heal(30);
+          this.reduceMana(50);
+          break;
+        case spellKind.fire:
+          this.reduceMana(25);
       }
       // notify listeners
       this.onSpellCastCallbacks.forEach(callback => callback(castedSpell));
@@ -167,9 +174,15 @@ export class Game {
     this.health -= amount;
     if (this.health < 0) this.health = 0;
     this.onHealthChangeCallbacks.forEach(callback => callback(this.health));
-    if (this.health === 0) {
+    if (this.health === 0) 
       this.onLoseCallbacks.forEach(callback => callback());
-    }
+  }
+
+  private reduceMana(amount: number){
+    this.mana -= amount;
+    console.log("new mana:" + this.mana);
+    if (this.mana < 0) this.mana = 0
+    this.onManaChangeCallbacks.forEach(callback => callback(this.mana))
   }
 
   public opponentCastSpell(spell: SpellKind) {
@@ -194,6 +207,10 @@ export class Game {
 
   public onHealthChange(callback: (health: number) => void) {
     this.onHealthChangeCallbacks.push(callback);
+  }
+
+  public onManaChange(callback: (mana: number) => void) {
+    this.onManaChangeCallbacks.push(callback);
   }
 
   public onLose(callback: () => void) {

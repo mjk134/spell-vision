@@ -27,7 +27,6 @@ function App() {
   const [joinCode, setJoinCode] = useState('')
   const [gestures, setGestures] = useState<Gesture[]>([GESTURES.none]);
   const [health, setHealth] = useState(100);
-  // @ts-expect-error - Mana system not yet implemented in Game class
   const [mana, setMana] = useState(100);
   const [opponentHealth, setOpponentHealth] = useState(100);
   const lastGestureRef = useRef<Gesture>(GESTURES.none);
@@ -64,6 +63,19 @@ function App() {
         });
       }
     });
+
+    //Set up callback for mana changes
+    gameRef.current.onManaChange((newMana: number) => {
+      setMana(newMana)
+
+      if (remoteFeedRef.current) {
+        remoteFeedRef.current.sendData({
+          type: 'manaUpdate',
+          mana: newMana,
+          timestamp: Date.now()
+        })
+      }
+    })
 
     // Set up callback for losing
     gameRef.current.onLose(() => {

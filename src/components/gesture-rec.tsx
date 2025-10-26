@@ -56,7 +56,7 @@ export default function HandRecogniser({stream, setGestures}: {stream: React.Ref
                     delegate: "CPU"  // Model uses CPU-only ops anyway
                 },
                 runningMode: "VIDEO",
-                numHands: 1  // Enable detection of up to 2 hands
+                numHands: 1  
             });
             console.log("GestureRecognizer created successfully");
             setRecognizerReady(true);
