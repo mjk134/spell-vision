@@ -17,7 +17,8 @@ import { cn } from "./lib/utils.ts";
 
 function App() {
   const remoteFeedRef = useRef<RemoteFeedHandle>(null);
-  const handRecogniserStreamRef = useRef<MediaStream | null>(null);
+  const handRecogniserCanvasStreamRef = useRef<MediaStream | null>(null);
+  const handRecogniserVideoStreamRef = useRef<MediaStream | null>(null);
   const gameRef = useRef<Game | null>(null);
   const [roomId, setRoomId] = useState('');
   const [isConnected, setIsConnected] = useState(false);
@@ -142,7 +143,7 @@ function App() {
       toast.error('Please enter a room ID');
       return;
     }
-    if (!handRecogniserStreamRef.current) {
+    if (!handRecogniserCanvasStreamRef.current) {
       toast.error('Please wait for gesture recognition to initialize');
       return;
     }
@@ -238,7 +239,7 @@ function App() {
           <div className="flex flex-col w-[40%] h-full max-h-full gap-10">
             {/* Local Player stream*/}
             {/* <div className="bg-gray-300 h-[28vmin]" /> */}
-            <HandRecogniser stream={handRecogniserStreamRef} setGestures={setGestures}/>
+            <HandRecogniser canvasStream={handRecogniserCanvasStreamRef} videoStream={handRecogniserVideoStreamRef} setGestures={setGestures}/>
             {/* Local Player HP */}
             <div className="flex flex-row items-center justify-between gap-4 text-gray-200 w-full h-[4vh]">
               <Statbar progress={health} totalProgress={100} />
@@ -256,7 +257,7 @@ function App() {
             {/* <div className="bg-gray-300 h-[28vmin]" /> */}
             <RemoteFeed
               ref={remoteFeedRef}
-              localStreamRef={handRecogniserStreamRef}
+              webcamStreamRef={handRecogniserVideoStreamRef}
               peerId={peerId}
               gestures={gestures}
             />

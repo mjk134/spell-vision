@@ -21,7 +21,7 @@ export interface RemoteFeedHandle {
  * RemoteFeedProps: Props passed from parent
  */
 interface RemoteFeedProps {
-  localStreamRef: React.RefObject<MediaStream | null>;  // Our webcam stream (from HandRecogniser)
+  webcamStreamRef: React.RefObject<MediaStream | null>; // (Optional) Our webcam stream
   peerId?: string;                                       // Are we 'caller' or 'callee'?
   gestures: Gesture[];                                   // Current detected gestures
 }
@@ -41,10 +41,11 @@ interface RemoteFeedProps {
  * - Video element displays the remote stream
  */
 const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
-    ({ localStreamRef, gestures: _gestures }, ref) => {
+    ({ webcamStreamRef, gestures: _gestures }, ref) => {
         // === Component State ===
 
-        const remoteVideoRef = useRef<HTMLVideoElement | null>(null);  // Reference to <video> element
+        const remoteCanvasVideoRef = useRef<HTMLVideoElement | null>(null);  // Reference to <video> element
+        const remoteWebcamVideoRef = useRef<HTMLVideoElement | null>(null);  // (Optional) Reference to webcam <video> element
         const [peer, setPeer] = useState<WebRTCPeer | null>(null);     // Current WebRTC peer instance
         const [roomId, setRoomId] = useState<string>('');              // Current room ID
         const [isConnected, setIsConnected] = useState(false);         // Are we connected?
@@ -67,7 +68,7 @@ const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
         const connect = async (newRoomId: string, connectPeerId: 'caller' | 'callee') => {
             // Get the current stream from the ref
             // (HandRecogniser sets this asynchronously after canvas is ready)
-            const localStream = localStreamRef.current;
+            const localStream = webcamStreamRef.current;
 
             // Validation: Must have both room ID and stream
             if (!newRoomId || !localStream) {
@@ -95,8 +96,8 @@ const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
                 (remoteStream) => {
                     // Set the remote stream as the source of our <video> element
                   console.log('Received remote stream:', remoteStream);
-                    if (remoteVideoRef.current) {
-                        remoteVideoRef.current.srcObject = remoteStream;
+                    if (remoteCanvasVideoRef.current) {
+                        remoteCanvasVideoRef.current.srcObject = remoteStream;
                     }
                 },
                 // Callback when data arrives via data channel
@@ -155,8 +156,8 @@ const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
                 setIsConnected(false);
 
                 // Clear the video element
-                if (remoteVideoRef.current) {
-                    remoteVideoRef.current.srcObject = null;
+                if (remoteCanvasVideoRef.current) {
+                    remoteCanvasVideoRef.current.srcObject = null;
                 }
             }
         };
@@ -237,12 +238,12 @@ const RemoteFeed = forwardRef<RemoteFeedHandle, RemoteFeedProps>(
             <div className="relative bg-gray-400 h-[28vmin]">
                     {/* Video element where remote peer's video will appear */}
                     <video
-                        ref={remoteVideoRef}
+                        ref={remoteCanvasVideoRef}
                         autoPlay          // Start playing as soon as stream arrives
                         playsInline       // Prevent fullscreen on mobile
                         className="h-full w-full object-cover bg-black"
                     />
-
+                    <video ref={remoteWebcamVideoRef} autoPlay playsInline className="z-20" />
                     {/* Show "Waiting..." if not connected, or "Connected" badge if connected */}
                     {!roomId || roomId.trim() === '' ? (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/80 text-white">
