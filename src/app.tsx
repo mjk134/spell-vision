@@ -284,6 +284,9 @@ function App() {
             })}
             <span className="font-mono text-6xl pl-4 text-gray-200">→ 🌱</span>
          </div>
+         <div className="text-gray-200 text-3xl">
+            {lastGestureRef.current}
+         </div>
         </div>
       </div>
     </main>
