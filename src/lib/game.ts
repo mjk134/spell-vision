@@ -117,6 +117,14 @@ export class Game {
     // if only one spell remains, and at its 3rd gesture, cast it
     if (this.targetSpells.length === 1 && this.currentIndex === 2) {
       const castedSpell = this.targetSpells[0];
+      switch (castedSpell) {
+        case spellKind.water:
+          clearInterval(this.fireInterval);
+          this.heal(5);
+          break;
+        case spellKind.plant:
+          this.heal(30);
+      }
       // notify listeners
       this.onSpellCastCallbacks.forEach(callback => callback(castedSpell));
       // reset for next spell
@@ -179,14 +187,7 @@ export class Game {
           }
         }, 1000);
         break; }
-      case spellKind.water:
-        // put out fire, heal 5 health
-        clearInterval(this.fireInterval);
-        this.heal(5);
-        break;
-      case spellKind.plant:
-        // heal 30 health
-        this.heal(30);
+      default:
         break;
     }
   }
